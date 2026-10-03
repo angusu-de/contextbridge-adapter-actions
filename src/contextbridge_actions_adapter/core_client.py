@@ -170,7 +170,9 @@ class ContextBridgeV2Client:
         endpoint: dict[str, Any] = {
             "id": self.endpoint_id,
             "profile": self.profile,
-            "state": "busy" if busy else "idle",
+            # Core only schedules work onto an endpoint that explicitly reports
+            # waiting.  "idle" is a display state, not v2 routing evidence.
+            "state": "busy" if busy else "waiting",
             "models": list(actions)[:20],
         }
         if capability:

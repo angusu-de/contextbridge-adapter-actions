@@ -49,3 +49,35 @@ jobs:
       - run: pip-audit
       - run: python -m build
       - run: twine check dist/*
+
+  contextbridge-actions-boundary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out actions adapter
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Check out pinned public ContextBridge
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: IamAngusU/ContextBridge
+          ref: d136ecffc4118d5f9758c4eb8d97dfd29eb4a0ac
+          path: .conformance/contextbridge
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.12"
+          cache: pip
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.27.x"
+          cache: false
+      - run: python -m pip install -e .
+      - name: Build public Core and prove the mutation boundary without provider traffic
+        shell: bash
+        run: |
+          mkdir -p .conformance/bin
+          (cd .conformance/contextbridge && go build -o ../bin/contextbridge ./cmd/contextbridge)
+          CB_TEST_CORE_BINARY="${{ github.workspace }}/.conformance/bin/contextbridge" \
+            python -m unittest discover -s tests -p 'test_public_core.py' -v
