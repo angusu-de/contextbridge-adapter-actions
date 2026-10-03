@@ -60,9 +60,13 @@ def _add_core(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--endpoint-id", type=int, default=1, help="positive local endpoint ID")
 
 
-def _add_relay(parser: argparse.ArgumentParser) -> None:
+def _add_presence(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--relay-url", default="", help="ContextBridge relay HTTPS or loopback HTTP origin")
-    parser.add_argument("--producer-token-file", default="", help="scheduled-action producer credential file")
+    parser.add_argument(
+        "--presence-token-file",
+        default="",
+        help="producer credential with the same subject but no scheduled-action authority",
+    )
     parser.add_argument("--adapter-id", default="actions-primary", help="stable lowercase presence ID")
     parser.add_argument("--instance-id", default=_safe_instance(), help="lowercase deployment instance ID")
 
@@ -80,15 +84,15 @@ def build_parser() -> argparse.ArgumentParser:
 
     run = commands.add_parser("run", help="execute confirmed scoped actions through adapter protocol v2")
     _add_core(run)
-    _add_relay(run)
+    _add_presence(run)
     run.add_argument("--once", action="store_true", help="process at most one immediately available job")
 
     doctor = commands.add_parser("doctor", help="verify core, relay, store, credential, and UID bindings")
     _add_core(doctor)
-    _add_relay(doctor)
+    _add_presence(doctor)
 
     presence = commands.add_parser("presence", help="register or renew the external adapter presence")
-    _add_relay(presence)
+    _add_presence(presence)
 
     destination = commands.add_parser("destination", help="manage owner-scoped opaque destinations")
     destination_commands = destination.add_subparsers(dest="destination_command", required=True)
@@ -134,7 +138,7 @@ def _core(args: argparse.Namespace) -> ContextBridgeV2Client:
     )
 
 
-def _relay(args: argparse.Namespace) -> RelayClient:
+def _producer_relay(args: argparse.Namespace) -> RelayClient:
     token_file = args.producer_token_file or os.environ.get("CONTEXTBRIDGE_PRODUCER_TOKEN_FILE", "")
     if not token_file:
         raise RelayProtocolError("--producer-token-file or CONTEXTBRIDGE_PRODUCER_TOKEN_FILE is required")
@@ -144,8 +148,22 @@ def _relay(args: argparse.Namespace) -> RelayClient:
     )
 
 
+def _presence_relay(args: argparse.Namespace) -> RelayClient:
+    token_file = args.presence_token_file or os.environ.get("CONTEXTBRIDGE_PRESENCE_TOKEN_FILE", "")
+    if not token_file:
+        raise RelayProtocolError("--presence-token-file or CONTEXTBRIDGE_PRESENCE_TOKEN_FILE is required")
+    relay = RelayClient(
+        args.relay_url or os.environ.get("CONTEXTBRIDGE_RELAY_URL", "http://127.0.0.1:32150"),
+        _secret(token_file, "presence"),
+    )
+    identity = relay.whoami()
+    if identity.scheduled_actions:
+        raise RelayProtocolError("presence credential must not grant scheduled-action authority")
+    return relay
+
+
 def _identity_scope(args: argparse.Namespace) -> tuple[RelayClient, str, str]:
-    relay = _relay(args)
+    relay = _producer_relay(args)
     identity = relay.whoami()
     if not identity.scheduled_actions:
         raise RelayProtocolError("producer credential lacks scheduled-action authority")
@@ -163,7 +181,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         if args.command in {"run", "doctor"}:
             core = _core(args)
-            relay = _relay(args)
+            relay = _presence_relay(args)
             if args.command == "run":
                 completed = ActionsAdapterService(core).run(
                     relay,
@@ -187,7 +205,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                         "protocol": status.get("protocol"),
                         "profile": core.profile,
                         "owner_subject": identity.subject,
-                        "scheduled_actions": identity.scheduled_actions,
+                        "presence_least_privilege": not identity.scheduled_actions,
                         "presence": {
                             "adapter_uid": presence.adapter_uid,
                             "enabled": presence.enabled,
@@ -202,7 +220,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 0
 
         if args.command == "presence":
-            relay = _relay(args)
+            relay = _presence_relay(args)
             identity = relay.whoami()
             lease = relay.heartbeat(adapter_id=args.adapter_id, instance_id=args.instance_id)
             print(

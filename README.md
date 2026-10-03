@@ -35,6 +35,12 @@ remain in `contextbridge-adapter-research`; neither adapter imports the other.
    and only then calls GitHub.
 6. Ambiguous provider outcomes are never retried automatically.
 
+Execution uses a separate presence credential with the same producer subject
+but **without** scheduled-action authority. The channel that stages, previews,
+and confirms an action keeps the policy-bearing producer credential. A
+compromised executor can therefore renew its liveness lease, but cannot mint or
+confirm its own external work.
+
 Opaque references are selectors, not bearer credentials. Matching owner,
 tenant, destination, action kind, expiry, adapter UID, and occurrence are all
 required.
@@ -61,6 +67,10 @@ The relay producer credential also needs a scheduled-action policy binding the
 same stable adapter UID, profile, principal, allowed action kinds, and
 destination references. Preview and confirmation remain relay operations; this
 adapter cannot bypass them.
+
+Create a second producer credential with the same `--subject`, but omit
+`--scheduled-actions-policy`; store it as `presence.token`. Never give the
+executor the channel's policy-bearing producer token.
 
 ## Register and stage
 
@@ -103,7 +113,7 @@ contextbridge-actions-adapter run \
   --profile github-actions \
   --token-file ./secrets/adapter.token \
   --relay-url https://relay.example.net \
-  --producer-token-file ./secrets/producer.token
+  --presence-token-file ./secrets/presence.token
 ```
 
 Absence, disablement, or failure of this process affects only its own route.

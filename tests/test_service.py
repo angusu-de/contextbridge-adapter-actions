@@ -8,7 +8,11 @@ from typing import Any
 
 from contextbridge_actions_adapter.contracts import RuntimeOptions
 from contextbridge_actions_adapter.core_client import CoreProtocolError, WorkLease
-from contextbridge_actions_adapter.github import AmbiguousProviderError, DefinitiveProviderError
+from contextbridge_actions_adapter.github import (
+    AmbiguousProviderError,
+    DefinitiveProviderError,
+    PreflightProviderError,
+)
 from contextbridge_actions_adapter.relay_client import PresenceLease
 from contextbridge_actions_adapter.service import ActionsAdapterService, MutationOutcomeUnknown
 from contextbridge_actions_adapter.store import ActionStore
@@ -44,6 +48,11 @@ class FakeProvider:
         self.calls = 0
         self.callback = callback
         self.error = error
+        self.preflight_error: BaseException | None = None
+
+    def preflight(self, _repository: str, _action_kind: str, _payload: dict[str, Any]) -> None:
+        if self.preflight_error:
+            raise self.preflight_error
 
     def execute(self, repository: str, action_kind: str, payload: dict[str, Any]) -> dict[str, Any]:
         self.calls += 1
@@ -131,7 +140,7 @@ class ServiceTests(unittest.TestCase):
         service.process(self.work(), self.options, self.store, provider)
         self.assertEqual(provider.calls, 1)
         self.assertEqual(self.store.attempt_state(self.schedule, 1), "completed")
-        self.assertEqual(client.calls, ["progress:1", "check", "claim", "progress:2", "complete"])
+        self.assertEqual(client.calls, ["check", "progress:1", "check", "claim", "progress:2", "complete"])
 
         service.process(self.work(observation_only=True), self.options, self.store, provider)
         self.assertEqual(provider.calls, 1)
@@ -177,6 +186,17 @@ class ServiceTests(unittest.TestCase):
         self.assertEqual(self.store.attempt_state(self.schedule, 1), "prepared")
         self.assertNotIn("claim", client.calls)
         self.assertEqual(client.outputs[-1]["error"], "adapter_presence_denied")
+
+    def test_failed_read_only_preflight_never_reaches_mutation_boundary(self) -> None:
+        client = FakeClient()
+        provider = FakeProvider()
+        provider.preflight_error = PreflightProviderError("temporary read failure")
+        service = ActionsAdapterService(client)  # type: ignore[arg-type]
+        service.process(self.work(), self.options, self.store, provider)
+        self.assertEqual(provider.calls, 0)
+        self.assertEqual(self.store.attempt_state(self.schedule, 1), "prepared")
+        self.assertNotIn("claim", client.calls)
+        self.assertEqual(client.outputs[-1]["error"], "adapter_target_unavailable")
 
 
 if __name__ == "__main__":

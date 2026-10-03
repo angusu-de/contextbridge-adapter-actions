@@ -7,7 +7,7 @@ from typing import Any
 
 from .contracts import ContractError, RuntimeOptions, parse_action_job, parse_profile_options
 from .core_client import ContextBridgeV2Client, CoreProtocolError, WorkLease
-from .github import AmbiguousProviderError, DefinitiveProviderError, GitHubActions
+from .github import AmbiguousProviderError, DefinitiveProviderError, GitHubActions, PreflightProviderError
 from .relay_client import RelayClient, RelayProtocolError
 from .store import ActionStore, ActionStoreError, AmbiguousActionError
 
@@ -76,8 +76,8 @@ class ActionsAdapterService:
         store = ActionStore(options.database_path)
         provider = GitHubActions(options.github_token_file)
         identity = relay.whoami()
-        if not identity.scheduled_actions:
-            raise RelayProtocolError("producer credential lacks scheduled-action authority")
+        if identity.scheduled_actions:
+            raise RelayProtocolError("presence credential must not grant scheduled-action authority")
         presence = relay.heartbeat(adapter_id=adapter_id, instance_id=instance_id)
         if presence.adapter_uid != options.adapter_uid:
             raise RelayProtocolError("profile adapter_uid does not match the authenticated relay presence")
@@ -149,7 +149,6 @@ class ActionsAdapterService:
         if work.observation_only:
             raise MutationOutcomeUnknown("ContextBridge marked the occurrence observation-only without a receipt")
 
-        self.client.progress(work, 1, "authorized action references and scope verified", 25)
         self.client.check_lease(work)
         if relay is not None:
             try:
@@ -162,6 +161,17 @@ class ActionsAdapterService:
                     work, "adapter_presence_denied", RuntimeError("adapter is disabled or unavailable")
                 )
                 return
+        try:
+            provider.preflight(prepared.repository, envelope.action_kind, prepared.payload)
+        except DefinitiveProviderError as exc:
+            self._complete_error(work, "adapter_target_rejected", exc)
+            return
+        except PreflightProviderError as exc:
+            self._complete_error(work, "adapter_target_unavailable", exc)
+            return
+
+        self.client.progress(work, 1, "authorized action references and scope verified", 25)
+        self.client.check_lease(work)
         store.mark_mutating(envelope, prepared.request_digest)
         try:
             self.client.claim_mutation(work)

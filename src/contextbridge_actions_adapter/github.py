@@ -23,6 +23,10 @@ class AmbiguousProviderError(RuntimeError):
     """The provider may have applied the mutation."""
 
 
+class PreflightProviderError(RuntimeError):
+    """A read-only target check failed before any mutation began."""
+
+
 class _NoRedirect(HTTPRedirectHandler):
     def redirect_request(
         self,
@@ -80,6 +84,46 @@ class GitHubActions:
 
     def check(self) -> None:
         _read_secret(self.token_file)
+
+    def preflight(self, repository: str, action_kind: str, payload: dict[str, Any]) -> None:
+        if action_kind == "github.issue.create":
+            return
+        if action_kind not in {"github.issue.comment", "github.issue.update"}:
+            raise DefinitiveProviderError("GitHub action kind is unsupported")
+        owner, name = repository.split("/", 1)
+        base = f"{GITHUB_API_ORIGIN}/repos/{quote(owner, safe='')}/{quote(name, safe='')}"
+        number = int(payload["issue_number"])
+        url = base + f"/issues/{number}"
+        request = Request(  # noqa: S310  # nosec B310
+            url,
+            method="GET",
+            headers={
+                "Accept": "application/vnd.github+json",
+                "Authorization": f"Bearer {_read_secret(self.token_file)}",
+                "User-Agent": "contextbridge-adapter-actions/0.1",
+                "X-GitHub-Api-Version": "2022-11-28",
+            },
+        )
+        try:
+            with self._opener.open(request, timeout=15) as response:
+                status = int(response.status)
+                raw = _read_bounded(response)
+        except HTTPError as exc:
+            if 400 <= exc.code < 500:
+                raise DefinitiveProviderError(f"GitHub rejected the issue target (HTTP {exc.code})") from exc
+            raise PreflightProviderError(f"GitHub target check returned HTTP {exc.code}") from exc
+        except (OSError, URLError, TimeoutError) as exc:
+            raise PreflightProviderError("GitHub target check could not complete") from exc
+        if not 200 <= status < 300:
+            raise PreflightProviderError(f"GitHub target check returned HTTP {status}")
+        try:
+            value = loads(raw, max_bytes=MAX_RESPONSE_BYTES)
+        except StrictJSONError as exc:
+            raise PreflightProviderError("GitHub target check returned invalid JSON") from exc
+        if not isinstance(value, dict) or value.get("number") != number or value.get("repository_url") != base:
+            raise PreflightProviderError("GitHub target check did not match the requested issue")
+        if "pull_request" in value:
+            raise DefinitiveProviderError("target is a pull request; this action permits issues only")
 
     def execute(self, repository: str, action_kind: str, payload: dict[str, Any]) -> dict[str, Any]:
         owner, name = repository.split("/", 1)

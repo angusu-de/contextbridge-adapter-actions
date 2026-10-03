@@ -71,6 +71,19 @@ class GitHubTests(unittest.TestCase):
         with self.assertRaises(AmbiguousProviderError):
             backend.execute("o/r", "github.issue.update", {"issue_number": 1, "state": "closed"})
 
+    def test_preflight_accepts_an_exact_issue_and_rejects_a_pull_request(self) -> None:
+        issue = {"number": 1, "repository_url": "https://api.github.com/repos/o/r"}
+        opener = FakeOpener(FakeResponse(issue, status=200))
+        backend = GitHubActions(self.token, opener=opener)
+        backend.preflight("o/r", "github.issue.comment", {"issue_number": 1, "body": "hello"})
+        self.assertEqual(opener.requests[0].method, "GET")
+        self.assertEqual(opener.requests[0].full_url, "https://api.github.com/repos/o/r/issues/1")
+
+        pull_request = {**issue, "pull_request": {"url": "https://api.github.com/repos/o/r/pulls/1"}}
+        backend = GitHubActions(self.token, opener=FakeOpener(FakeResponse(pull_request, status=200)))
+        with self.assertRaises(DefinitiveProviderError):
+            backend.preflight("o/r", "github.issue.update", {"issue_number": 1, "state": "closed"})
+
 
 if __name__ == "__main__":
     unittest.main()
