@@ -59,9 +59,15 @@ contextbridge adapter setup github-actions \
   --option 'adapter_uid="adp_REPLACE_WITH_PRESENCE_UID"' \
   --option 'database_path="C:/ProgramData/ContextBridgeActions/actions.db"' \
   --option 'github_token_file="C:/ProgramData/ContextBridgeActions/secrets/github.token"' \
+  --option 'allowed_actions=["github.issue.create","github.issue.comment","github.issue.update"]' \
   --token-file C:/ProgramData/ContextBridgeActions/secrets/adapter.token \
   --create-token
 ```
+
+`allowed_actions` is mandatory and is the deployment's write ceiling. Omit
+actions a deployment must not perform; for example, a comment-only adapter uses
+`["github.issue.comment"]`. A prompt, staged payload, or provider response
+cannot widen that list.
 
 The relay producer credential also needs a scheduled-action policy binding the
 same stable adapter UID, profile, principal, allowed action kinds, and

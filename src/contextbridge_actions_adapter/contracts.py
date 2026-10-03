@@ -88,9 +88,9 @@ def parse_profile_options(profile: Any) -> RuntimeOptions:
         raise ContractError("adapter_uid must be a ContextBridge adp_ identifier")
     database_path = Path(_required_string(raw.get("database_path"), "database_path", 4_096)).expanduser()
     token_path = Path(_required_string(raw.get("github_token_file"), "github_token_file", 4_096)).expanduser()
-    actions = raw.get("allowed_actions", list(SUPPORTED_ACTIONS))
+    actions = raw.get("allowed_actions")
     if not isinstance(actions, list) or not 1 <= len(actions) <= len(SUPPORTED_ACTIONS):
-        raise ContractError("allowed_actions must contain 1..3 action kinds")
+        raise ContractError("allowed_actions must explicitly contain 1..3 action kinds")
     normalized: list[str] = []
     for action in actions:
         if not isinstance(action, str) or action not in SUPPORTED_ACTIONS:
