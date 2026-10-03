@@ -41,7 +41,7 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - run: python -m pip install --upgrade pip ruff mypy bandit pip-audit build twine
+      - run: python -m pip install --upgrade pip "setuptools>=83.0.0" ruff mypy bandit pip-audit build twine
       - run: python -m pip install -e .
       - run: ruff check .
       - run: mypy src
@@ -62,7 +62,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: IamAngusU/ContextBridge
-          ref: d136ecffc4118d5f9758c4eb8d97dfd29eb4a0ac
+          ref: 8b342da3007a42ef0fe34f337024e84440ec5fd9
           path: .conformance/contextbridge
           persist-credentials: false
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
