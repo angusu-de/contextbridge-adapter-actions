@@ -123,8 +123,8 @@ contextbridge-actions-adapter run \
 ```
 
 Absence, disablement, or failure of this process affects only its own route.
-ContextBridge, local inference, pools, Alva, WhatsApp, Voice, and research do
-not import or depend on this package.
+ContextBridge, local inference, pools, and every other adapter do not import or
+depend on this package.
 
 ## Agent use
 
