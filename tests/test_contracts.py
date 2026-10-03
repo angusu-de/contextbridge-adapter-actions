@@ -57,10 +57,26 @@ class ContractTests(unittest.TestCase):
                         "adapter_uid": self.uid,
                         "database_path": str(Path(directory) / "actions.db"),
                         "github_token_file": str(Path(directory) / "github.token"),
+                        "allowed_actions": [
+                            "github.issue.create",
+                            "github.issue.comment",
+                            "github.issue.update",
+                        ],
                     }
                 }
             )
         self.assertEqual(parsed.allowed_actions, self.options.allowed_actions)
+
+        with self.assertRaisesRegex(ContractError, "explicitly"):
+            parse_profile_options(
+                {
+                    "options": {
+                        "adapter_uid": self.uid,
+                        "database_path": "actions.db",
+                        "github_token_file": "github.token",
+                    }
+                }
+            )
         action = parse_action_job(self.job(), self.options, now=self.now)
         self.assertEqual(action.owner_subject, "channel-primary")
         self.assertEqual(action.tenant_id, "tenant-a")
