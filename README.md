@@ -4,10 +4,13 @@ An out-of-tree ContextBridge adapter for explicit external mutations. It keeps
 write authority separate from read-only research and from the public core.
 
 Status: alpha. The contracts, negative paths, package artifacts, and simulated
-provider boundary are tested on the supported Python versions. No live GitHub
-mutation is performed by the test suite, and installing this repository grants
-no authority until an operator separately configures credentials, destinations,
-relay policy, preview, and confirmation.
+provider boundary are tested on the supported Python versions. CI also builds a
+pinned public ContextBridge Core and proves preview, confirmation, scheduling,
+owner/tenant-bound v2 leasing, one mutation claim, completion, and relay
+reconciliation end to end. The final provider is deliberately simulated: no
+live GitHub mutation is performed by the test suite, and installing this
+repository grants no authority until an operator separately configures
+credentials, destinations, relay policy, preview, and confirmation.
 
 The first bounded provider family is GitHub:
 
